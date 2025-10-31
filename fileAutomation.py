@@ -8,12 +8,12 @@ import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-source_dir="/Users/ngkok/Downloads"
-dest_dir_sfx="/Users/ngkok/Downloads/Sound"
-desT_dir_music="/Users/ngkok/Desktop/Sound/Music"
-dest_dir_video="/Users/ngkok/Desktop/Downloaded video"
-dest_dir_image="/Users/ngkok/Desktop/Downloaded image"
-dest_dir_documents="/Users/ngkok/Desktop/Downloaded document"
+source_dir=r"C:\Users\ngkok\Downloads"
+dest_dir_sfx=r"C:\Users\ngkok\Downloads\Sound"
+desT_dir_music=r"C:\Users\ngkok\Desktop\Sound\Music"
+dest_dir_video=r"C:\Users\ngkok\Desktop\Downloaded video"
+dest_dir_image=r"C:\Users\ngkok\Desktop\Downloaded image"
+dest_dir_documents=r"C:\Users\ngkok\Desktop\Downloaded document"
 
 # ? supported image types
 image_extensions = [".jpg", ".jpeg", ".jpe", ".jif", ".jfif", ".jfi", ".png", ".gif", ".webp", ".tiff", ".tif", ".psd", ".raw", ".arw", ".cr2", ".nrw",
@@ -22,7 +22,7 @@ image_extensions = [".jpg", ".jpeg", ".jpe", ".jif", ".jfif", ".jfi", ".png", ".
 video_extensions = [".webm", ".mpg", ".mp2", ".mpeg", ".mpe", ".mpv", ".ogg",
                     ".mp4", ".mp4v", ".m4v", ".avi", ".wmv", ".mov", ".qt", ".flv", ".swf", ".avchd"]
 # ? supported Audio types
-audio_extensions = [".m4a", ".flac", "mp3", ".wav", ".wma", ".aac"]
+audio_extensions = [".m4a", ".flac", ".mp3", ".wav", ".wma", ".aac"]
 # ? supported Document types
 document_extensions = [".doc", ".docx", ".odt",
                        ".pdf", ".xls", ".xlsx", ".ppt", ".pptx"]
@@ -32,7 +32,7 @@ def make_unique(dest, name):
     filename, extension = splitext(name)
     counter = 1
     # * IF FILE EXISTS, ADDS NUMBER TO THE END OF THE FILENAME
-    while exists(f"{dest}/{name}"):
+    while exists(join(dest, name)):
         name = f"{filename}({str(counter)}){extension}"
         counter += 1
 
@@ -40,25 +40,35 @@ def make_unique(dest, name):
 
 
 def move_file(dest, entry, name):
-    if exists(f"{dest}/{name}"):
-        unique_name = make_unique(dest, name)
-        oldName = join(dest, name)
-        newName = join(dest, unique_name)
-        rename(oldName, newName)
-    move(entry, dest)
+    try:
+        if exists(join(dest, name)):
+            unique_name = make_unique(dest, name)
+            oldName = join(dest, name)
+            newName = join(dest, unique_name)
+            rename(oldName, newName)
+        move(entry, dest)
+    except PermissionError:
+        logging.warning(f"Cannot move {name} - file is in use or protected")
+    except Exception as e:
+        logging.error(f"Error moving {name}: {e}")
 
 
 class Handler(FileSystemEventHandler):
     # ? THIS FUNCTION WILL RUN WHENEVER THERE IS A CHANGE IN "source_dir"
     # ? .upper is for not missing out on files with uppercase extensions
     def on_modified(self, event):
+        self.process_files()
+    
+    def process_files(self):
+        """Process all files in the source directory"""
         with scandir(source_dir) as entries:
             for entry in entries:
-                name = entry.name
-                self.check_audio_files(entry, name)
-                self.check_video_files(entry, name)
-                self.check_image_files(entry, name)
-                self.check_document_files(entry, name)
+                if entry.is_file():  # Only process files, not directories
+                    name = entry.name
+                    self.check_audio_files(entry, name)
+                    self.check_video_files(entry, name)
+                    self.check_image_files(entry, name)
+                    self.check_document_files(entry, name)
 
     def check_audio_files(self, entry, name):  # * Checks all Audio Files
         for audio_extension in audio_extensions:
@@ -95,13 +105,26 @@ if __name__ == "__main__":
                         format='%(asctime)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
     path = source_dir
+    print(f"Starting file automation...")
+    print(f"Watching directory: {path}")
+    print(f"Directory exists: {exists(path)}")
+    
+    # Process existing files first
+    print("Processing existing files...")
     event_handler = Handler()
+    event_handler.process_files()
+    print("Existing files processed.")
+    
+    # Start monitoring for new files
     observer = Observer()
     observer.schedule(event_handler, path, recursive=True)
     observer.start()
+    print("File monitoring started. Press Ctrl+C to stop.")
     try:
         while True:
             sleep(10)
     except KeyboardInterrupt:
+        print("Stopping file monitor...")
         observer.stop()
     observer.join()
+    print("File monitor stopped.")
